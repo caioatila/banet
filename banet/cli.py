@@ -7,7 +7,8 @@ __all__ = ['banet_viirs375_download', 'banet_viirs750_download', 'banet_create_d
 # %% ../nbs/06_cli.ipynb 2
 import calendar
 import pandas as pd
-from fastscript import call_parse, Param
+#from fastscript import call_parse, Param
+from fastcore.script import *
 import pdb
 import os
 import IPython

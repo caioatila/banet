@@ -19,7 +19,7 @@ from .core import *
 from .geo import Region
 from .models import BA_Net
 
-# %% ../nbs/04_predict.ipynb 5
+# %% ../nbs/04_predict.ipynb 4
 def open_nc(fn, slice_idx=None, *args, **kwargs):
     data = netCDF4.Dataset(fn, mode='r')
     if slice_idx is None:
