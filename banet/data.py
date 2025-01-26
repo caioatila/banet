@@ -29,7 +29,7 @@ from warnings import warn
 from fastcore.test import test_eq
 from pyresample.geometry import SwathDefinition, AreaDefinition, CRS, create_area_def
 from pyresample import kd_tree
-
+import gcsfs
 
 #from google.cloud import storage
 #import shapely.wkt
@@ -47,6 +47,8 @@ from geoget.download import *
 from .core import *
 from .geo import *
 from IPython.core.debugger import set_trace
+from google.cloud import storage
+
 
 # %% ../nbs/02_data.ipynb 4
 def store_files(ds, source_bucket, year, month, day):
@@ -438,6 +440,8 @@ def group_files(files:list):
     return pd.DataFrame({'files': files, 'ids':['.'.join(f.stem.split('.')[-4:-2]) for f in files]}
                         ).groupby('ids').agg(lambda x : list(x)).files.values.tolist()
 
+
+
 class ViirsDataset(BaseDataset):
     "Subclass of `BaseDataset` to process VIIRS bands in accordance with its spatial resolution."
     _name = None
@@ -542,18 +546,34 @@ class ViirsCloudDataset(BaseDataset):
     "Subclass of `BaseDataset` to process VIIRS bands in accordance with its spatial resolution."
     _name = None
     def __init__(self, paths:InOutPath, region:Region,
-                 times:pd.DatetimeIndex=None, bands:list=None):
+                 times:pd.DatetimeIndex=None, bands:list=None, bucket_name=None):
         super().__init__(self._name, paths, region, times, bands)
         self.times = self.check_files()
+        self.bucket = bucket_name
+        match region.name:
+            case 'ambr':
+                self.bk_region = 'amazonia'
+            case 'cebr':
+                self.bk_region = 'cerrado'
+            case 'sulbr':
+                self.bk_region = 'sul'
+        storage_client = storage.Client()
+        self.source_bucket = storage_client.bucket(bucket_name)
+        self.source_prefix = f"{self.bk_region}/ladsweb/"
+        self.destination_prefix = f"{self.bk_region}/dataset/"
+        self.blobs = list(self.source_bucket.list_blobs(prefix=self.source_prefix))
 
+      
     def list_files(self, time:pd.Timestamp)-> list:
         if time in self.times:
-            files = self.paths.src.ls(include=[f'_d{time.year}{time.month}{time.day}_', '.h5'])
+            pattern = re.compile(f'_d{str(time.year)}{str(time.month).zfill(2)}{str(time.day).zfill(2)}_*')
+            files = [blob for blob in self.blobs if re.search(pattern, blob.name)]
         return files
     
-    def list_pattern(self, time:pd.Timestamp, pattern='GITCO_j01')-> list:
-        if time in self.times:
-            files = self.path.src.ls(include=[f'{pattern}_d{time.year}{str(time.month).zfill(2)}{str(time.day).zfill(2)}_', '.h5'])
+    def list_pattern(self, pattern:str)-> list:
+        ''' Padrao de busca SVI{band_nrs[0]}_j01_{date_aq}_{time_aq} ou GITCO'''
+        pattern_str = re.compile(f'{pattern}*') 
+        files =  [blob for blob in self.blobs if re.search(pattern_str, blob.name)]
         return files
 
     def check_files(self):
@@ -582,7 +602,7 @@ class ViirsCloudDataset(BaseDataset):
 
     def extract_values(self, hdf_data, s, band_id): #Join bands with GITCO
         data_dict = {}
-        mid = f"VIIRS-I{band_id}-SDR_ALL" if band_id else "VIIRS-IMG-GEO-TC_All"
+        mid = f"VIIRS-I{band_id}-SDR_All" if band_id else "VIIRS-IMG-GEO-TC_All"
         hdf_file = hdf_data[f"All_Data/{mid}/{s.split('_')[0]}"]
         data = hdf_file[:].astype(np.float32)
         data[data <= -999] = np.nan
@@ -602,27 +622,31 @@ class ViirsCloudDataset(BaseDataset):
         data_dict ={}
 
         for gitco in files:
-            date_aq, time_aq = (gitco.stem).split('_')[2:4]
+            date_aq, time_aq = (gitco.name).split('_')[2:4]
 
-            with h5py.File(gitco, 'r') as f:
-                for s in geo_bands:
-                    geo_dict = self.extract_values(f, s, 0)
-                    data_dict.update(geo_dict)
+            fs = gcsfs.GCSFileSystem()
+            with fs.open(f'gs://{self.bucket}/{gitco.name}', mode='rb') as spec:
+                with h5py.File(spec, 'r') as f:
+                    for s in geo_bands:
+                        geo_dict = self.extract_values(f, s, 0)
+                        data_dict.update(geo_dict)
 
-            for s in img_bands:
-                id = s.split('_')[1][-1]
-                band_file = self.path.src.ls(include=[f'SVI0{id}_j01_{date_aq}_{time_aq}', '.h5'])[0]
+                for s in img_bands:
+                    id = s.split('_')[1][-1]
+                    band_file = self.list_pattern(pattern=f'SVI0{id}_j01_{date_aq}_{time_aq}') 
+                    #self.path.src.ls(include=[f'SVI0{id}_j01_{date_aq}_{time_aq}', '.h5'])[0]
 
-                with h5py.File(band_file, 'r') as f:
-                    band_dict = self.extract_values(f, s, int(id))
-                    data_dict.update(band_dict)
+                    with fs.open(f'gs://{self.bucket}/{band_file.name}', mode='rb') as band_spec:
+                        with h5py.File(band_spec, 'r') as f_band:
+                            band_dict = self.extract_values(f_band, s, int(id))
+                            data_dict.update(band_dict)
 
         return data_dict
     
     def group_files(self, files:list):
         return pd.DataFrame(
             {'files':files,
-             'ids':['.'.join(f.stem.split('_')[2:4]) for f in files]}
+             'ids':['.'.join(f.name.split('_')[2:4]) for f in files]}
         ).groupby('ids').agg(lambda x: list(x)).files.values.tolist()
     
     
@@ -644,9 +668,9 @@ class ViirsCloudDataset(BaseDataset):
         using the `open` method, applying each of the `proc_funcs` to the output of the previous
         and `save` the processed data using save method."""
         tstr = time.strftime('%Y%m%d')
-        files = self.list_pattern(time)
+        files = self.list_files(time)
         files = group_files(files)
-        tstr = time.strftime('%Y%m%d')
+        tstr = time.strftime('%Y%m%d') #TODO daqui em diante
         filename = f'{self.paths.dst}/{self.name}{self.region.name}_{tstr}.nc'
         if not Path(filename).is_file() or replace:
             data_dict = {v:[] for v in self.bands}
