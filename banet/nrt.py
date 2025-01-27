@@ -147,7 +147,7 @@ class RunManager():
             
         elif self.product == 'VIIRSGCP375': #VIIRS375 but from NODDS cloud bucket 
             bands = ['Reflectance_I1', 'Reflectance_I2', 'Radiance_I4', 'Radiance_I5', 'SolarZenithAngle', 'SatelliteZenithAngle', 'Latitude', 'Longitude']            
-            viirs = ViirsCloudDataset(InOutPath(self.path.ladsweb, self.path.dataset), self.R, bands=bands, bucket_name=self.bucket)
+            viirs = GCP375Dataset(InOutPath(self.path.ladsweb, self.path.dataset), self.R, bands=bands, bucket_name=self.bucket)
             merge_tiles = MergeTiles('SatelliteZenithAngle')
             mir_calc = MirCalc('SolarZenithAngle', 'Radiance_I4', 'Radiance_I5')
             rename2 = BandsRename(['Reflectance_I1', 'Reflectance_I2'], ['Red', 'NIR'])

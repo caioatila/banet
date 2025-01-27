@@ -544,11 +544,9 @@ class Viirs750Dataset(ViirsDataset):
 # %% ../nbs/02_data.ipynb 26
 class ViirsCloudDataset(BaseDataset):
     "Subclass of `BaseDataset` to process VIIRS bands in accordance with its spatial resolution."
-    _name = None
+    _name = None 
     def __init__(self, paths:InOutPath, region:Region,
                  times:pd.DatetimeIndex=None, bands:list=None, bucket_name=None):
-        super().__init__(self._name, paths, region, times, bands)
-        self.times = self.check_files()
         self.bucket = bucket_name
         match region.name:
             case 'ambr':
@@ -562,6 +560,8 @@ class ViirsCloudDataset(BaseDataset):
         self.source_prefix = f"{self.bk_region}/ladsweb/"
         self.destination_prefix = f"{self.bk_region}/dataset/"
         self.blobs = list(self.source_bucket.list_blobs(prefix=self.source_prefix))
+        super().__init__(self._name, paths, region, times, bands)
+        self.times = self.check_files()
 
       
     def list_files(self, time:pd.Timestamp)-> list:
@@ -579,17 +579,17 @@ class ViirsCloudDataset(BaseDataset):
     def check_files(self):
         not_missing = []
         for i, t in tqdm(enumerate(self.times), total=len(self.times)):
-            files = self.list_pattern(t)
+            files = self.list_files(t)
             if len(files)==0:
                 print(f'Missing files for {t}')
             else: not_missing.append(i)
         return self.times[not_missing]
 
     def find_dates(self, first:pd.Timestamp=None, last:pd.Timestamp=None):
-        pattern = r'^\w+.d(20[0-9][0-9])([0-1][0-9])([0-3][0-9])_..*$'
+        pattern = r"d(\d{4})(\d{2})(\d{2})_"
         times = []
-        for f in self.paths.src.ls():
-            x = re.search(pattern, f.stem)
+        for f in self.blobs:
+            x = re.search(pattern, f.name)
             if x is not None:
                 year, month, day = map(x.group, [1,2,3])
                 times.append(pd.Timestamp(f'{year}-{month}-{day}'))
@@ -618,30 +618,27 @@ class ViirsCloudDataset(BaseDataset):
     
     def open_h5py(self, files:list) -> dict:
         geo_bands = ['SolarZenithAngle', 'SatelliteZenithAngle', 'Latitude', 'Longitude']
-        img_bands = ['Reflectance_I1', 'Reflectance_I2', 'Radiance_I4', 'Radiance_I5']
-        data_dict ={}
+        img_bands = {'SVI01':'Reflectance_I1', 'SVI02':'Reflectance_I2', 'SVI04':'Radiance_I4', 'SVI05':'Radiance_I5'}
+        temp_dict ={}
 
-        for gitco in files:
-            date_aq, time_aq = (gitco.name).split('_')[2:4]
+        for f_name in files:
+            date_aq, time_aq = (f_name.name).split('_')[2:4]
 
             fs = gcsfs.GCSFileSystem()
-            with fs.open(f'gs://{self.bucket}/{gitco.name}', mode='rb') as spec:
+            with fs.open(f'gs://{self.bucket}/{f_name.name}', mode='rb') as spec:
                 with h5py.File(spec, 'r') as f:
-                    for s in geo_bands:
-                        geo_dict = self.extract_values(f, s, 0)
-                        data_dict.update(geo_dict)
+                    if 'GITCO' in f_name.name:    
+                        for s in geo_bands:
+                            geo_dict = self.extract_values(f, s, None)
+                            temp_dict.update(geo_dict)
 
-                for s in img_bands:
-                    id = s.split('_')[1][-1]
-                    band_file = self.list_pattern(pattern=f'SVI0{id}_j01_{date_aq}_{time_aq}') 
-                    #self.path.src.ls(include=[f'SVI0{id}_j01_{date_aq}_{time_aq}', '.h5'])[0]
+                    elif 'SVI' in f_name.name:
+                        s = img_bands[f_name.name.split('/')[-1].split('_')[0]]
+                        id = s.split('_')[1][-1]
+                        band_dict = self.extract_values(f, s, int(id))
+                        temp_dict.update(band_dict)
 
-                    with fs.open(f'gs://{self.bucket}/{band_file.name}', mode='rb') as band_spec:
-                        with h5py.File(band_spec, 'r') as f_band:
-                            band_dict = self.extract_values(f_band, s, int(id))
-                            data_dict.update(band_dict)
-
-        return data_dict
+        return temp_dict
     
     def group_files(self, files:list):
         return pd.DataFrame(
@@ -651,7 +648,7 @@ class ViirsCloudDataset(BaseDataset):
     
     
     def resample(self, data: dict, epsg=4326, max_distance_meter=1000, num_workers=8):
-        swath_def = SwathDefinition(lons=data['longitude'], lats=data['latitude'])
+        swath_def = SwathDefinition(lons=data['Longitude'], lats=data['Latitude'])
         crs = CRS(f'EPSG:{epsg}')
         area_def = create_area_def(crs.name, crs.to_dict(), area_extent=self.region.bbox, resolution=self.region.pixel_size)
         valid_input_index, valid_output_index, index_array, distance_array = \
@@ -669,7 +666,7 @@ class ViirsCloudDataset(BaseDataset):
         and `save` the processed data using save method."""
         tstr = time.strftime('%Y%m%d')
         files = self.list_files(time)
-        files = group_files(files)
+        files = self.group_files(files)
         tstr = time.strftime('%Y%m%d') #TODO daqui em diante
         filename = f'{self.paths.dst}/{self.name}{self.region.name}_{tstr}.nc'
         if not Path(filename).is_file() or replace:
