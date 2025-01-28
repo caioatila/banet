@@ -69,25 +69,7 @@ class RunManager(banet.nrt.RunManager):
         return start, end
         
     def download_viirs(self, maxOrderSize=[1800, 1200]):
-        "Download viirs data needed for the dataset."
-        tstart, tend = self.get_download_dates()
-        region = self.R.new()
-        
-        if self.product == 'VIIRS750':
-            viirs_downloader = VIIRS750_download(region, tstart, tend)
-            viirs_downloader_list = viirs_downloader.split_times()
-            
-        elif self.product == 'VIIRS375':
-            viirs_downloader1 = VIIRS375_download(region, tstart, tend)
-            region.pixel_size = 0.1 # Angles can be interpolated later
-            viirs_downloader2 = VIIRS750_download(region, tstart, tend, 
-                                bands=['SolarZenithAngle', 'SatelliteZenithAngle'])
-            viirs_downloader_list1 = viirs_downloader1.split_times(maxOrderSize=maxOrderSize[0])
-            viirs_downloader_list2 = viirs_downloader2.split_times(maxOrderSize=maxOrderSize[1])
-            viirs_downloader_list = [*viirs_downloader_list1, *viirs_downloader_list2]
-        else: raise NotImplementedError(f'Not implemented for {self.product}.')
-            
-        run_all(viirs_downloader_list, self.path.ladsweb)
+        pass
     
     def get_preds(self, weight_files:list, threshold=0.5, save=True, max_size=2000,
                   filename='data', check_file=False, verbose=False):
