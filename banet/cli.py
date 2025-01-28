@@ -14,7 +14,7 @@ import os
 import IPython
 import pdb
 
-from geoget.download import run_all
+#from geoget.download import run_all
 
 from .core import InOutPath, Path, ls, dict2json
 from .data import *

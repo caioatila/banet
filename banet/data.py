@@ -43,7 +43,7 @@ import gcsfs
 #import xarray as xr
 
 
-from geoget.download import *
+#from geoget.download import *
 from .core import *
 from .geo import *
 from IPython.core.debugger import set_trace
