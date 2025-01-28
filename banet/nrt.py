@@ -13,7 +13,7 @@ import IPython
 import matplotlib.pyplot as plt
 from fastcore.test import test_eq
 import datetime
-from geoget.download import run_all, Ladsweb
+#from geoget.download import run_all, Ladsweb
 from .core import filter_files, ls, Path, InOutPath, ProjectPath
 from .geo import Region
 from .data import *
