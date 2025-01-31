@@ -497,34 +497,23 @@ class ViirsCloudDataset(BaseDataset):
     "Subclass of `BaseDataset` to process VIIRS bands in accordance with its spatial resolution."
     _name = None 
     def __init__(self, paths:InOutPath, region:Region,
-                 times:pd.DatetimeIndex=None, bands:list=None, bucket_name=None):
-        self.bucket = bucket_name
-        match region.name:
-            case 'ambr':
-                self.bk_region = 'amazonia'
-            case 'cebr':
-                self.bk_region = 'cerrado'
-            case 'sulbr':
-                self.bk_region = 'sul'
-        storage_client = storage.Client()
-        self.source_bucket = storage_client.bucket(bucket_name)
-        self.source_prefix = f"{self.bk_region}/ladsweb/"
-        self.destination_prefix = f"{self.bk_region}/dataset/"
-        self.blobs = list(self.source_bucket.list_blobs(prefix=self.source_prefix))
+                 times:pd.DatetimeIndex=None, bands:list=None):
         super().__init__(self._name, paths, region, times, bands)
         self.times = self.check_files()
 
       
     def list_files(self, time:pd.Timestamp)-> list:
         if time in self.times:
-            pattern = re.compile(f'_d{str(time.year)}{str(time.month).zfill(2)}{str(time.day).zfill(2)}_*')
-            files = [blob for blob in self.blobs if re.search(pattern, blob.name)]
+            #pattern = re.compile(f'_d{str(time.year)}{str(time.month).zfill(2)}{str(time.day).zfill(2)}_*')
+            #files = [blob for blob in self.blobs if re.search(pattern, blob.name)]
+            files = self.paths.src.ls(include=[f'_d{str(time.year)}{str(time.month).zfill(2)}{str(time.day).zfill(2)}_', '.h5'])
         return files
     
     def list_pattern(self, pattern:str)-> list:
         ''' Padrao de busca SVI{band_nrs[0]}_j01_{date_aq}_{time_aq} ou GITCO'''
-        pattern_str = re.compile(f'{pattern}*') 
-        files =  [blob for blob in self.blobs if re.search(pattern_str, blob.name)]
+        #pattern_str = re.compile(f'{pattern}*') 
+        #files =  [blob for blob in self.blobs if re.search(pattern_str, blob.name)]
+        files = self.paths.src.ls(include=[f'{pattern}', '.h5'])
         return files
 
     def check_files(self):
@@ -539,8 +528,8 @@ class ViirsCloudDataset(BaseDataset):
     def find_dates(self, first:pd.Timestamp=None, last:pd.Timestamp=None):
         pattern = r"d(\d{4})(\d{2})(\d{2})_"
         times = []
-        for f in self.blobs:
-            x = re.search(pattern, f.name)
+        for f in self.paths.src.ls():
+            x = re.search(pattern, f.stem)
             if x is not None:
                 year, month, day = map(x.group, [1,2,3])
                 times.append(pd.Timestamp(f'{year}-{month}-{day}'))
@@ -573,28 +562,27 @@ class ViirsCloudDataset(BaseDataset):
         temp_dict ={}
 
         for f_name in files:
-            date_aq, time_aq = (f_name.name).split('_')[2:4]
+            date_aq, time_aq = (f_name.stem).split('_')[2:4]
 
-            fs = gcsfs.GCSFileSystem()
-            with fs.open(f'gs://{self.bucket}/{f_name.name}', mode='rb') as spec:
-                with h5py.File(spec, 'r') as f:
-                    if 'GITCO' in f_name.name:    
-                        for s in geo_bands:
-                            geo_dict = self.extract_values(f, s, None)
-                            temp_dict.update(geo_dict)
+            #fs = gcsfs.GCSFileSystem()
+            #with fs.open(f'gs://{self.bucket}/{f_name.name}', mode='rb') as spec:
+            with h5py.File(str(f_name), 'r') as f:
+                if 'GITCO' in f_name.stem:    
+                    for s in geo_bands:
+                        geo_dict = self.extract_values(f, s, None)
+                        temp_dict.update(geo_dict)
 
-                    elif 'SVI' in f_name.name:
-                        s = img_bands[f_name.name.split('/')[-1].split('_')[0]]
-                        id = s.split('_')[1][-1]
-                        band_dict = self.extract_values(f, s, int(id))
-                        temp_dict.update(band_dict)
-
+                elif 'SVI' in f_name.stem:
+                    s = img_bands[f_name.stem.split('/')[-1].split('_')[0]]
+                    id = s.split('_')[1][-1]
+                    band_dict = self.extract_values(f, s, int(id))
+                    temp_dict.update(band_dict)
         return temp_dict
     
     def group_files(self, files:list):
         return pd.DataFrame(
             {'files':files,
-             'ids':['.'.join(f.name.split('_')[2:4]) for f in files]}
+             'ids':['.'.join(f.stem.split('_')[2:4]) for f in files]}
         ).groupby('ids').agg(lambda x: list(x)).files.values.tolist()
     
     
