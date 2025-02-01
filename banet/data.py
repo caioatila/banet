@@ -29,25 +29,9 @@ from warnings import warn
 from fastcore.test import test_eq
 from pyresample.geometry import SwathDefinition, AreaDefinition, CRS, create_area_def
 from pyresample import kd_tree
-import gcsfs
-
-#from google.cloud import storage
-#import shapely.wkt
-#from shapely.geometry import box
-#from pandas import date_range
-#from datetime import date, datetime, timedelta
-#from pathlib import Path
-#from re import search
-#from itertools import chain
-#import fsspec
-#import xarray as xr
-
-
-#from geoget.download import *
 from .core import *
 from .geo import *
 from IPython.core.debugger import set_trace
-from google.cloud import storage
 
 
 # %% ../nbs/02_data.ipynb 4
