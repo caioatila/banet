@@ -1,0 +1,9 @@
+project:
+  output-dir: _docs
+
+website:
+  title: "banet"
+  site-url: "https://mnpinto.github.io/banet/"
+  description: "A deep learning approach for mapping and dating burned areas using temporal sequences of satellite images"
+  repo-branch: master
+  repo-url: "https://github.com/mnpinto/banet/tree/master/"

@@ -60,12 +60,17 @@ class RunManager(banet.nrt.RunManager):
     def get_download_dates(self):
         "Find for which new dates the files need to be downloaded."
         files = self.check_data()['files']
+        missing_add = self.check_data()['missing_files']
         if len(files) == 0: 
             start = self.times[0]
+            end = self.times[-1].strftime('%Y-%m-%d 23:59:59')
         else:
-            start = pd.Timestamp(files[-1].stem.split('_')[-1])+pd.Timedelta(days=1)
-        start = start.strftime('%Y-%m-%d 00:00:00')
-        end = self.times[-1].strftime('%Y-%m-%d 23:59:59')
+            #start = pd.Timestamp(files[-1].stem.split('_')[-1])+pd.Timedelta(days=1)
+            start = pd.Timestamp(missing_add[0].stem.split('_')[-1])
+            end = pd.Timestamp(missing_add[-1].stem.split('_')[-1])
+            start = start.strftime('%Y-%m-%d 00:00:00')
+            end = end.strftime('%Y-%m-%d 23:59:59')
+        #end = self.times[-1].strftime('%Y-%m-%d 23:59:59')
         return start, end
         
     def download_viirs(self, maxOrderSize=[1800, 1200]):
