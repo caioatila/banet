@@ -174,7 +174,7 @@ def predict_time(path:InOutPath, times, weight_files:list, region:Region,
     tstart = pd.Timestamp(f'{tstart.year}-{tstart.month}-01')
     tend = pd.Timestamp(f'{tend.year}-{tend.month}-01')
     ptimes = pd.date_range(tstart, tend, freq='MS')[1:-1]
-    ptimes_eom = pd.date_range(tstart, tend, freq='M')[1:]
+    ptimes_eom = pd.date_range(tstart, tend, freq='ME')[1:]
     si = [[max(0,j*max_size-buffer), (j+1)*max_size+buffer, 
            max(0,i*max_size-buffer), (i+1)*max_size+buffer] 
           for i in range(region.shape[1]//max_size+1) for j in range(region.shape[0]//max_size+1)]

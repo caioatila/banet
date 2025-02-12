@@ -42,6 +42,7 @@ class RunManager(banet.nrt.RunManager):
         tstart = pd.Timestamp(f'{tstart.year}-{tstart.month}-01')
         tend = times[-1] + pd.Timedelta(days=75)
         tend = pd.Timestamp(f'{tend.year}-{tend.month}-01') - pd.Timedelta(days=1)
+        tend = pd.Timestamp(f'{tend.year}-{tend.month}-01') + pd.Timedelta(days=15)        
         return pd.date_range(tstart, tend, freq='D')
         
     def check_data(self):
